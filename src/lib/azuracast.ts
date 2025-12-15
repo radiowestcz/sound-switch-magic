@@ -227,28 +227,33 @@ export class AzuraCastAPI {
     return `${this.config.apiUrl}/station/${this.config.stationId}/file/${encodeURIComponent(path)}`;
   }
 
-  createWebSocket(onMessage: (data: NowPlayingData) => void): WebSocket {
-    const ws = new WebSocket(this.config.wsUrl);
+  createWebSocket(onMessage: (data: NowPlayingData) => void): WebSocket | null {
+    try {
+      const ws = new WebSocket(this.config.wsUrl);
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      ws.send(JSON.stringify({
-        subs: { [`station:${this.config.stationId}`]: {} }
-      }));
-    };
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        ws.send(JSON.stringify({
+          subs: { [`station:${this.config.stationId}`]: {} }
+        }));
+      };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.pub?.data?.np) {
-          onMessage(data.pub.data.np);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.pub?.data?.np) {
+            onMessage(data.pub.data.np);
+          }
+        } catch (e) {
+          console.error('WebSocket parse error:', e);
         }
-      } catch (e) {
-        console.error('WebSocket parse error:', e);
-      }
-    };
+      };
 
-    return ws;
+      return ws;
+    } catch (e) {
+      console.warn('WebSocket connection failed (insecure context or network issue):', e);
+      return null;
+    }
   }
 }
 

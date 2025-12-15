@@ -76,7 +76,7 @@ export function useAzuraCast(): UseAzuraCastReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // WebSocket connection
+  // WebSocket connection (optional - falls back to polling if unavailable)
   useEffect(() => {
     const handleNowPlayingUpdate = (data: NowPlayingData) => {
       setNowPlaying(data);
@@ -85,22 +85,30 @@ export function useAzuraCast(): UseAzuraCastReturn {
       setError(null);
     };
 
-    wsRef.current = api.createWebSocket(handleNowPlayingUpdate);
+    const ws = api.createWebSocket(handleNowPlayingUpdate);
+    
+    if (ws) {
+      wsRef.current = ws;
 
-    wsRef.current.onclose = () => {
-      setIsConnected(false);
-      // Reconnect after 3 seconds
-      setTimeout(() => {
-        if (wsRef.current?.readyState === WebSocket.CLOSED) {
-          wsRef.current = api.createWebSocket(handleNowPlayingUpdate);
-        }
-      }, 3000);
-    };
+      ws.onclose = () => {
+        setIsConnected(false);
+        // Reconnect after 3 seconds
+        setTimeout(() => {
+          if (wsRef.current?.readyState === WebSocket.CLOSED) {
+            const newWs = api.createWebSocket(handleNowPlayingUpdate);
+            if (newWs) wsRef.current = newWs;
+          }
+        }, 3000);
+      };
 
-    wsRef.current.onerror = () => {
-      setIsConnected(false);
-      setError('Připojení selhalo');
-    };
+      ws.onerror = () => {
+        setIsConnected(false);
+        // Don't show error - polling will work as fallback
+      };
+    } else {
+      // WebSocket not available, rely on polling
+      console.log('WebSocket unavailable, using polling only');
+    }
 
     return () => {
       wsRef.current?.close();
