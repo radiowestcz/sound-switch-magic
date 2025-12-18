@@ -253,8 +253,8 @@ export class AzuraCastAPI {
   }
 
   async uploadVoiceTrack(blob: Blob, filename: string): Promise<void> {
-    // Convert blob to File with proper name and type
-    const file = new File([blob], `${filename}.mp3`, { type: 'audio/mpeg' });
+    // AzuraCast accepts webm files, so we keep the original format
+    const file = new File([blob], `${filename}.webm`, { type: 'audio/webm' });
     
     const formData = new FormData();
     formData.append('file', file);
@@ -267,7 +267,11 @@ export class AzuraCastAPI {
         body: formData,
       }
     );
-    if (!response.ok) throw new Error('Failed to upload voice track');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Voice track upload failed:', errorText);
+      throw new Error('Failed to upload voice track');
+    }
   }
 
   getStreamUrl(): string {

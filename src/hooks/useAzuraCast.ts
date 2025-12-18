@@ -25,6 +25,7 @@ export interface UseAzuraCastReturn {
   refreshQueue: () => Promise<void>;
   refreshLibrary: () => Promise<void>;
   uploadVoiceTrack: (blob: Blob, filename: string) => Promise<void>;
+  uploadFiles: (files: FileList) => Promise<void>;
 }
 
 export function useAzuraCast(config: AzuraCastConfig | null): UseAzuraCastReturn {
@@ -270,6 +271,22 @@ export function useAzuraCast(config: AzuraCastConfig | null): UseAzuraCastReturn
     }
   }, [currentPath]);
 
+  const uploadFiles = useCallback(async (files: FileList) => {
+    if (!apiRef.current) throw new Error('Není nakonfigurováno');
+    try {
+      // Upload files one by one
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        await apiRef.current.uploadFile(file, currentPath ? `${currentPath}/${file.name}` : file.name);
+      }
+      // Refresh library after upload
+      const libraryData = await apiRef.current.fetchLibrary(currentPath);
+      setLibrary(libraryData);
+    } catch (e) {
+      throw new Error('Nepodařilo se nahrát soubory');
+    }
+  }, [currentPath]);
+
   return {
     nowPlaying,
     queue,
@@ -289,5 +306,6 @@ export function useAzuraCast(config: AzuraCastConfig | null): UseAzuraCastReturn
     refreshQueue,
     refreshLibrary,
     uploadVoiceTrack,
+    uploadFiles,
   };
 }
