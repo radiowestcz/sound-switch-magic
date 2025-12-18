@@ -183,7 +183,18 @@ export class AzuraCastAPI {
     
     const response = await fetch(url, { headers: this.getHeaders() });
     if (!response.ok) throw new Error('Failed to fetch library');
-    return response.json();
+    const data = await response.json();
+    
+    // Normalize response - AzuraCast can return different formats
+    return data.map((item: any) => ({
+      ...item,
+      // Ensure is_dir is properly set - check for dir property or type
+      is_dir: item.is_dir === true || item.dir === true || item.type === 'directory',
+      // Ensure path is set
+      path: item.path || item.name || item.text || '',
+      // Set name from text if not present
+      name: item.name || item.text || item.path?.split('/').pop() || '',
+    }));
   }
 
   async addToQueue(files: string[]): Promise<void> {
@@ -234,6 +245,24 @@ export class AzuraCastAPI {
       }
     );
     if (!response.ok) throw new Error('Failed to upload file');
+  }
+
+  async uploadVoiceTrack(blob: Blob, filename: string): Promise<void> {
+    // Convert blob to File with proper name and type
+    const file = new File([blob], `${filename}.mp3`, { type: 'audio/mpeg' });
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(
+      `${this.config.apiUrl}/station/${this.config.stationId}/files`,
+      {
+        method: 'POST',
+        headers: { 'X-API-Key': this.config.apiKey },
+        body: formData,
+      }
+    );
+    if (!response.ok) throw new Error('Failed to upload voice track');
   }
 
   getStreamUrl(): string {
