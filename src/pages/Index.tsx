@@ -46,6 +46,7 @@ const Index = () => {
     navigateUp,
     refreshLibrary,
     uploadVoiceTrack,
+    uploadFiles,
   } = useAzuraCast(config);
 
   const handleConfigSave = (settings: AzuraCastSettings) => {
@@ -81,8 +82,13 @@ const Index = () => {
     }
   };
 
-  const handleAddFiles = (files: FileList) => {
-    toast({ title: 'Info', description: 'Upload souborů vyžaduje backend integraci' });
+  const handleAddFiles = async (files: FileList) => {
+    try {
+      await uploadFiles(files);
+      toast({ title: 'Nahráno', description: `${files.length} soubor(ů) bylo nahráno na server` });
+    } catch (e) {
+      toast({ title: 'Chyba', description: 'Nepodařilo se nahrát soubory', variant: 'destructive' });
+    }
   };
 
   const handleVoiceSave = async (blob: Blob, name: string) => {
