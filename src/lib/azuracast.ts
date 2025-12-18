@@ -186,15 +186,20 @@ export class AzuraCastAPI {
     const data = await response.json();
     
     // Normalize response - AzuraCast can return different formats
-    return data.map((item: any) => ({
-      ...item,
-      // Ensure is_dir is properly set - check for dir property or type
-      is_dir: item.is_dir === true || item.dir === true || item.type === 'directory',
-      // Ensure path is set
-      path: item.path || item.name || item.text || '',
-      // Set name from text if not present
-      name: item.name || item.text || item.path?.split('/').pop() || '',
-    }));
+    return data.map((item: any) => {
+      const isDir = item.is_dir === true || item.dir === true || item.type === 'directory';
+      const itemPath = item.path || item.name || '';
+      // For directories, extract the folder name from the path (last segment)
+      const folderName = itemPath.split('/').filter(Boolean).pop() || '';
+      
+      return {
+        ...item,
+        is_dir: isDir,
+        path: itemPath,
+        // For directories use folder name from path, for files use metadata or filename
+        name: isDir ? folderName : (item.name || item.text || folderName),
+      };
+    });
   }
 
   async addToQueue(files: string[]): Promise<void> {
