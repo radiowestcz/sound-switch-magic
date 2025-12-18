@@ -260,14 +260,20 @@ export function useAzuraCast(config: AzuraCastConfig | null): UseAzuraCastReturn
   }, [currentPath]);
 
   const uploadVoiceTrack = useCallback(async (blob: Blob, filename: string) => {
-    if (!apiRef.current) throw new Error('Není nakonfigurováno');
+    console.log('uploadVoiceTrack called:', { blobSize: blob.size, blobType: blob.type, filename });
+    if (!apiRef.current) {
+      console.error('API not configured');
+      throw new Error('Není nakonfigurováno');
+    }
     try {
       await apiRef.current.uploadVoiceTrack(blob, filename);
+      console.log('Voice track uploaded successfully');
       // Refresh library after upload
       const libraryData = await apiRef.current.fetchLibrary(currentPath);
       setLibrary(libraryData);
     } catch (e) {
-      throw new Error('Nepodařilo se nahrát voice track');
+      console.error('uploadVoiceTrack error:', e);
+      throw e; // Re-throw original error for better debugging
     }
   }, [currentPath]);
 
