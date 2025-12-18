@@ -92,10 +92,12 @@ const Index = () => {
   };
 
   const handleVoiceSave = async (blob: Blob, name: string) => {
+    console.log('handleVoiceSave called with blob:', blob.size, 'bytes, type:', blob.type, 'name:', name);
     try {
       await uploadVoiceTrack(blob, name);
       toast({ title: 'Nahráno', description: `Voice track "${name}" byl nahrán na server` });
     } catch (e) {
+      console.error('Voice track upload error:', e);
       toast({ title: 'Chyba', description: 'Nepodařilo se nahrát voice track', variant: 'destructive' });
     }
   };
