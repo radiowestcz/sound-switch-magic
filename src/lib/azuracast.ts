@@ -89,14 +89,31 @@ export interface NowPlayingData {
   song_history: NowPlaying[];
 }
 
-// Default configuration - update these values
+// Default configuration - can be overridden by user settings
 export const defaultConfig: AzuraCastConfig = {
-  apiUrl: 'http://100.110.116.57/api',
+  apiUrl: '',
   stationId: 1,
-  apiKey: 'f39288465e74cc72:818cd40c5264e8e1079f76fa004ae382',
-  streamUrl: 'http://100.110.116.57/listen/r%C3%A1dio_v%C4%9Btrn%C3%ADk_-_studio/radio.mp3',
-  wsUrl: 'ws://100.110.116.57/api/live/nowplaying/websocket',
+  apiKey: '',
+  streamUrl: '',
+  wsUrl: '',
 };
+
+// Create config from user settings
+export function createConfigFromSettings(settings: {
+  serverUrl: string;
+  stationId: string;
+  apiKey: string;
+  streamUrl: string;
+}): AzuraCastConfig {
+  const baseUrl = settings.serverUrl.replace(/\/$/, '');
+  return {
+    apiUrl: `${baseUrl}/api`,
+    stationId: parseInt(settings.stationId) || 1,
+    apiKey: settings.apiKey,
+    streamUrl: settings.streamUrl || `${baseUrl}/radio/8000/radio.mp3`,
+    wsUrl: baseUrl.replace('http', 'ws') + '/api/live/nowplaying/websocket',
+  };
+}
 
 // Folder color mapping
 export const FOLDER_COLORS: Record<string, string> = {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/studio/Header';
@@ -6,12 +6,29 @@ import { NowPlaying } from '@/components/studio/NowPlaying';
 import { Queue } from '@/components/studio/Queue';
 import { Library } from '@/components/studio/Library';
 import { VoiceRecorderModal } from '@/components/studio/VoiceRecorderModal';
+import { ConfigModal, getStoredConfig, AzuraCastSettings } from '@/components/studio/ConfigModal';
 import { useAzuraCast } from '@/hooks/useAzuraCast';
-import { defaultConfig } from '@/lib/azuracast';
+import { createConfigFromSettings } from '@/lib/azuracast';
 
 const Index = () => {
   const { toast } = useToast();
   const [isVoiceRecorderOpen, setIsVoiceRecorderOpen] = useState(false);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [config, setConfig] = useState(() => {
+    const stored = getStoredConfig();
+    if (stored && stored.serverUrl && stored.apiKey) {
+      return createConfigFromSettings(stored);
+    }
+    return null;
+  });
+
+  // Auto-open config modal if not configured
+  useEffect(() => {
+    const stored = getStoredConfig();
+    if (!stored || !stored.serverUrl || !stored.apiKey) {
+      setIsConfigOpen(true);
+    }
+  }, []);
 
   const {
     nowPlaying,
@@ -28,7 +45,13 @@ const Index = () => {
     navigateTo,
     navigateUp,
     refreshLibrary,
-  } = useAzuraCast();
+  } = useAzuraCast(config);
+
+  const handleConfigSave = (settings: AzuraCastSettings) => {
+    const newConfig = createConfigFromSettings(settings);
+    setConfig(newConfig);
+    toast({ title: 'Uloženo', description: 'Nastavení bylo uloženo a aplikace se připojuje...' });
+  };
 
   const handleSkip = async () => {
     try {
@@ -67,7 +90,11 @@ const Index = () => {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <Header isConnected={isConnected} streamUrl={defaultConfig.streamUrl} />
+      <Header 
+        isConnected={isConnected} 
+        streamUrl={config?.streamUrl || ''} 
+        onOpenConfig={() => setIsConfigOpen(true)}
+      />
 
       <main className="flex-1 flex overflow-hidden">
         {/* Left - Player & Queue */}
@@ -107,6 +134,12 @@ const Index = () => {
         isOpen={isVoiceRecorderOpen}
         onClose={() => setIsVoiceRecorderOpen(false)}
         onSave={handleVoiceSave}
+      />
+
+      <ConfigModal
+        isOpen={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
+        onSave={handleConfigSave}
       />
 
       <Toaster />
