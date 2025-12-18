@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { Sun, Moon, Volume2, VolumeX, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils';
 interface HeaderProps {
   isConnected: boolean;
   streamUrl: string;
+  onOpenConfig: () => void;
 }
 
-export function Header({ isConnected, streamUrl }: HeaderProps) {
+export function Header({ isConnected, streamUrl, onOpenConfig }: HeaderProps) {
   const [time, setTime] = useState(new Date());
   const [isDark, setIsDark] = useState(true);
   const [isMonitorOn, setIsMonitorOn] = useState(false);
@@ -104,6 +105,17 @@ export function Header({ isConnected, streamUrl }: HeaderProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-4">
+        {/* Settings button */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="glass gap-2 rounded-full px-3"
+          onClick={onOpenConfig}
+        >
+          <Settings className="h-4 w-4" />
+          <span className="text-xs">Nastavení</span>
+        </Button>
+
         {/* Connection status */}
         <span
           className={cn(

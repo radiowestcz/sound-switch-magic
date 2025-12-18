@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { api, NowPlayingData, QueueItem, LibraryFile } from '@/lib/azuracast';
+import { AzuraCastAPI, AzuraCastConfig, NowPlayingData, QueueItem, LibraryFile } from '@/lib/azuracast';
 
 export interface UseAzuraCastReturn {
   // State
@@ -26,7 +26,7 @@ export interface UseAzuraCastReturn {
   refreshLibrary: () => Promise<void>;
 }
 
-export function useAzuraCast(): UseAzuraCastReturn {
+export function useAzuraCast(config: AzuraCastConfig | null): UseAzuraCastReturn {
   const [nowPlaying, setNowPlaying] = useState<NowPlayingData | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [library, setLibrary] = useState<LibraryFile[]>([]);
@@ -43,6 +43,18 @@ export function useAzuraCast(): UseAzuraCastReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const targetEndTimeRef = useRef<number>(0);
   const durationRef = useRef<number>(0);
+  const apiRef = useRef<AzuraCastAPI | null>(null);
+
+  // Create API instance when config changes
+  useEffect(() => {
+    if (config && config.apiUrl && config.apiKey) {
+      apiRef.current = new AzuraCastAPI(config);
+    } else {
+      apiRef.current = null;
+      setIsConnected(false);
+      setIsLoading(false);
+    }
+  }, [config]);
 
   // Update timer based on current playing info
   const updateTimerFromNowPlaying = useCallback((np: NowPlayingData) => {
@@ -76,8 +88,12 @@ export function useAzuraCast(): UseAzuraCastReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // WebSocket connection (optional - falls back to polling if unavailable)
+  // WebSocket connection and data fetch
   useEffect(() => {
+    if (!apiRef.current) return;
+
+    const api = apiRef.current;
+
     const handleNowPlayingUpdate = (data: NowPlayingData) => {
       setNowPlaying(data);
       updateTimerFromNowPlaying(data);
@@ -92,10 +108,9 @@ export function useAzuraCast(): UseAzuraCastReturn {
 
       ws.onclose = () => {
         setIsConnected(false);
-        // Reconnect after 3 seconds
         setTimeout(() => {
-          if (wsRef.current?.readyState === WebSocket.CLOSED) {
-            const newWs = api.createWebSocket(handleNowPlayingUpdate);
+          if (wsRef.current?.readyState === WebSocket.CLOSED && apiRef.current) {
+            const newWs = apiRef.current.createWebSocket(handleNowPlayingUpdate);
             if (newWs) wsRef.current = newWs;
           }
         }, 3000);
@@ -103,20 +118,10 @@ export function useAzuraCast(): UseAzuraCastReturn {
 
       ws.onerror = () => {
         setIsConnected(false);
-        // Don't show error - polling will work as fallback
       };
-    } else {
-      // WebSocket not available, rely on polling
-      console.log('WebSocket unavailable, using polling only');
     }
 
-    return () => {
-      wsRef.current?.close();
-    };
-  }, [updateTimerFromNowPlaying]);
-
-  // Initial data fetch
-  useEffect(() => {
+    // Initial data fetch
     const fetchInitialData = async () => {
       setIsLoading(true);
       try {
@@ -144,18 +149,21 @@ export function useAzuraCast(): UseAzuraCastReturn {
 
     // Fallback polling
     const pollInterval = setInterval(async () => {
+      if (!apiRef.current) return;
       try {
-        const npData = await api.fetchNowPlaying();
+        const npData = await apiRef.current.fetchNowPlaying();
         setNowPlaying(npData);
         updateTimerFromNowPlaying(npData);
+        setIsConnected(true);
       } catch (e) {
-        // Silently fail, WebSocket is primary
+        setIsConnected(false);
       }
     }, 5000);
 
     const queuePollInterval = setInterval(async () => {
+      if (!apiRef.current) return;
       try {
-        const queueData = await api.fetchQueue();
+        const queueData = await apiRef.current.fetchQueue();
         setQueue(queueData);
       } catch (e) {
         // Silently fail
@@ -163,20 +171,22 @@ export function useAzuraCast(): UseAzuraCastReturn {
     }, 8000);
 
     return () => {
+      wsRef.current?.close();
       clearInterval(pollInterval);
       clearInterval(queuePollInterval);
     };
-  }, [updateTimerFromNowPlaying]);
+  }, [config, updateTimerFromNowPlaying]);
 
   // Actions
   const skip = useCallback(async () => {
+    if (!apiRef.current) throw new Error('Není nakonfigurováno');
     try {
-      await api.skip();
-      // Refresh after skip
+      await apiRef.current.skip();
       setTimeout(async () => {
+        if (!apiRef.current) return;
         const [npData, queueData] = await Promise.all([
-          api.fetchNowPlaying(),
-          api.fetchQueue(),
+          apiRef.current.fetchNowPlaying(),
+          apiRef.current.fetchQueue(),
         ]);
         setNowPlaying(npData);
         updateTimerFromNowPlaying(npData);
@@ -188,9 +198,10 @@ export function useAzuraCast(): UseAzuraCastReturn {
   }, [updateTimerFromNowPlaying]);
 
   const addToQueue = useCallback(async (files: string[]) => {
+    if (!apiRef.current) throw new Error('Není nakonfigurováno');
     try {
-      await api.addToQueue(files);
-      const queueData = await api.fetchQueue();
+      await apiRef.current.addToQueue(files);
+      const queueData = await apiRef.current.fetchQueue();
       setQueue(queueData);
     } catch (e) {
       throw new Error('Nepodařilo se přidat do fronty');
@@ -198,9 +209,10 @@ export function useAzuraCast(): UseAzuraCastReturn {
   }, []);
 
   const removeFromQueue = useCallback(async (itemId: number | string) => {
+    if (!apiRef.current) throw new Error('Není nakonfigurováno');
     try {
-      await api.removeFromQueue(itemId);
-      const queueData = await api.fetchQueue();
+      await apiRef.current.removeFromQueue(itemId);
+      const queueData = await apiRef.current.fetchQueue();
       setQueue(queueData);
     } catch (e) {
       throw new Error('Nepodařilo se odebrat z fronty');
@@ -208,8 +220,9 @@ export function useAzuraCast(): UseAzuraCastReturn {
   }, []);
 
   const navigateTo = useCallback(async (path: string) => {
+    if (!apiRef.current) return;
     try {
-      const libraryData = await api.fetchLibrary(path);
+      const libraryData = await apiRef.current.fetchLibrary(path);
       setLibrary(libraryData);
       setCurrentPath(path);
     } catch (e) {
@@ -225,8 +238,9 @@ export function useAzuraCast(): UseAzuraCastReturn {
   }, [currentPath, navigateTo]);
 
   const refreshQueue = useCallback(async () => {
+    if (!apiRef.current) return;
     try {
-      const queueData = await api.fetchQueue();
+      const queueData = await apiRef.current.fetchQueue();
       setQueue(queueData);
     } catch (e) {
       // Silently fail
@@ -234,8 +248,9 @@ export function useAzuraCast(): UseAzuraCastReturn {
   }, []);
 
   const refreshLibrary = useCallback(async () => {
+    if (!apiRef.current) return;
     try {
-      const libraryData = await api.fetchLibrary(currentPath);
+      const libraryData = await apiRef.current.fetchLibrary(currentPath);
       setLibrary(libraryData);
     } catch (e) {
       // Silently fail
