@@ -241,28 +241,43 @@ export class AzuraCastAPI {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        // Strip prefix like "data:audio/webm;base64,"
-        const base64 = result.includes(',') ? result.split(',')[1] : result;
-        resolve(base64);
+        // AzuraCast /files expects only the raw base64 string, never the data URL header.
+        const base64 = (result.startsWith('data:') && result.includes(','))
+          ? result.split(',')[1]
+          : result;
+        resolve(base64.replace(/\s/g, ''));
       };
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(blob);
     });
   }
 
-  private async uploadBase64(path: string, blob: Blob): Promise<void> {
-    const base64 = await this.blobToBase64(blob);
-    const payload = { path, file: base64 };
+  private sanitizeUploadName(filename: string): string {
+    return filename
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'voicetrack';
+  }
+
+  private async uploadJsonBase64(path: string, base64DataString: string): Promise<void> {
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64DataString)) {
+      throw new Error('Invalid base64 upload data');
+    }
 
     const response = await fetch(
       `${this.config.apiUrl}/station/${this.config.stationId}/files`,
       {
         method: 'POST',
         headers: {
-          'X-API-Key': this.config.apiKey,
           'Content-Type': 'application/json',
+          'X-API-Key': this.config.apiKey,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          path,
+          file: base64DataString,
+        }),
       }
     );
     if (!response.ok) {
@@ -272,14 +287,21 @@ export class AzuraCastAPI {
     }
   }
 
+  private async uploadBase64(path: string, blob: Blob): Promise<void> {
+    const base64DataString = await this.blobToBase64(blob);
+    await this.uploadJsonBase64(path, base64DataString);
+  }
+
   async uploadFile(file: File, targetPath: string): Promise<void> {
     await this.uploadBase64(targetPath, file);
   }
 
   async uploadVoiceTrack(blob: Blob, filename: string): Promise<void> {
-    const uniqueName = `${filename}_${Date.now()}.webm`;
+    const safeName = this.sanitizeUploadName(filename.replace(/\.[^.]+$/, ''));
+    const uniqueName = `${safeName}_${Date.now()}.webm`;
     const path = `VoiceTracks/${uniqueName}`;
-    await this.uploadBase64(path, blob);
+    const base64DataString = await this.blobToBase64(blob);
+    await this.uploadJsonBase64(path, base64DataString);
   }
 
   getStreamUrl(): string {
