@@ -236,42 +236,50 @@ export class AzuraCastAPI {
     if (!response.ok) throw new Error('Failed to skip');
   }
 
-  async uploadFile(file: File, targetPath: string): Promise<void> {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('path', targetPath);
-
-    const response = await fetch(
-      `${this.config.apiUrl}/station/${this.config.stationId}/files`,
-      {
-        method: 'POST',
-        headers: { 'X-API-Key': this.config.apiKey },
-        body: formData,
-      }
-    );
-    if (!response.ok) throw new Error('Failed to upload file');
+  private blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        // Strip prefix like "data:audio/webm;base64,"
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
   }
 
-  async uploadVoiceTrack(blob: Blob, filename: string): Promise<void> {
-    // AzuraCast accepts webm files, so we keep the original format
-    const file = new File([blob], `${filename}.webm`, { type: 'audio/webm' });
-    
-    const formData = new FormData();
-    formData.append('file', file);
+  private async uploadBase64(path: string, blob: Blob): Promise<void> {
+    const base64 = await this.blobToBase64(blob);
+    const payload = { path, file: base64 };
 
     const response = await fetch(
       `${this.config.apiUrl}/station/${this.config.stationId}/files`,
       {
         method: 'POST',
-        headers: { 'X-API-Key': this.config.apiKey },
-        body: formData,
+        headers: {
+          'X-API-Key': this.config.apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       }
     );
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Voice track upload failed:', errorText);
-      throw new Error('Failed to upload voice track');
+      console.error('Upload failed:', response.status, errorText);
+      throw new Error(`Upload failed: ${response.status} ${errorText}`);
     }
+  }
+
+  async uploadFile(file: File, targetPath: string): Promise<void> {
+    await this.uploadBase64(targetPath, file);
+  }
+
+  async uploadVoiceTrack(blob: Blob, filename: string): Promise<void> {
+    const uniqueName = `${filename}_${Date.now()}.webm`;
+    const path = `VoiceTracks/${uniqueName}`;
+    await this.uploadBase64(path, blob);
   }
 
   getStreamUrl(): string {
